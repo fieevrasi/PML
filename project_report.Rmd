@@ -1,0 +1,141 @@
+---
+setitle: "Practical Machine Learning Course Project"
+author: "Eeva Rasi"
+date: "26 elokuuta 2017"
+output: html_document
+---
+
+
+# Practical Machine Learning Course Project
+
+#### author: Eeva Rasi
+#### date: 26.8.2017
+
+
+
+## Problem definition and background
+
+In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants
+and predict the manner in which they did the exercise. Participants were asked to perform barbell lifts correctly and 
+incorrectly in 5 different ways.
+
+The "classe" variable in the training set tells how the participants did the exercise:
+exactly according to the specification (Class A), throwing the elbows to the front (Class B),
+lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D), 
+throwing the hips to the front (Class E).
+
+## Data
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+
+```{r results='hide', message=FALSE, warning=FALSE}
+
+# Needed libraries
+require(caret)
+require(corrplot)
+require(xgboost)
+require(randomForest)
+require(stats)
+require(knitr)
+
+setwd("C:\\WD\\Practical Machine Learning")
+
+# The training data
+url_training <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(url_training, destfile="pml-training.csv", method="curl")
+
+# The test data
+url_testing <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(url_testing, destfile="pml-testing.csv", method="curl")
+
+# Load CSV files 
+training = read.csv("pml-training.csv")
+testing = read.csv("pml-testing.csv")
+
+```
+
+## Data Analysis & Cleasing
+
+The training dataset contains 19622 observations and 160 variables. The testing data set contains 20 observations and same variables as the training set. We start by partitioning the training data to create train.data dataset and test.data dataset.
+
+```{r results='hide', message=FALSE, warning=FALSE}
+set.seed(1234)
+
+# Partitioning
+inTrain  <- createDataPartition(training$classe, p=0.65, list=FALSE)
+train.data <- training[inTrain, ]
+test.data  <- training[-inTrain, ]
+
+```
+Let's continue and clean the data by checking and removing near zero variables, checking and removing variables that are mostly NA and removing identification only variables (columns 1-5).
+
+```{r results='hide', message=FALSE, warning=FALSE}
+# Check and remove near zero variables
+NZV <- nearZeroVar(train.data)
+
+train.data <- train.data[, -NZV]
+test.data  <- test.data[, -NZV]
+
+# Check and remove variables that are mostly NA
+naVar <- sapply(train.data, function(x) mean(is.na(x))) > 0.97
+train.data <- train.data[, naVar==FALSE]
+test.data  <- test.data[, naVar==FALSE]
+
+# Remove identification only variables (columns 1-5)
+train.data <- train.data[, -(1:5)]
+test.data  <- test.data[, -(1:5)]
+
+```
+
+## Prediction Model 
+
+Now we will create a prediction model to predict the "classe" variable.
+I decided to build two different models and compare them to achieve best result.
+I'm using two out of the box classifiers: Generalized Boosted Model and Random Forests as they shoud be the most
+accurate classifiers.
+
+### Method 1: Generalized Boosted Model
+
+```{r message=FALSE, warning=FALSE}
+#Generalized Boosted Model, cross-validation with 5 folds
+controlGMB <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modGBM  <- train(classe ~ ., data=train.data, method = "gbm",trControl = controlGMB, verbose = FALSE)
+
+# Predict the classe variable
+predictGBM <- predict(modGBM, newdata=test.data)
+confGBM <- confusionMatrix(predictGBM, test.data$classe)
+confGBM
+
+```
+Seems good. Accuracy is 0.9849 and out-of-sample error rate is 0.0151.
+
+### Method 2: Random Forests
+
+```{r message=FALSE, warning=FALSE}
+# Random Forests Model, cross-validation with 3 folds
+controlRF <- trainControl(method = "cv", number = 3)
+modRF <- train(classe ~ ., data = train.data, method = "rf", trControl = controlRF)
+					
+predictRF <- predict(modRF, newdata=test.data)
+confRF <- confusionMatrix(predictRF, test.data$classe)
+confRF
+```
+Also very good. Accuracy is 0.9966 and out-of-sample error rate is 0.0034.
+
+## Prediction on Testing Set
+Finally we can predict the "classe" variable on the test.data dataset with two models.
+
+```{r message=FALSE, warning=FALSE}
+# Predict with method 1: Generalized Boosted Model
+predictGBM <- predict(modGBM, newdata=testing)
+predictGBM
+
+# Predict with method 2: Random Forests
+predictRF <- predict(modRF, newdata=testing)
+predictRF
+```
